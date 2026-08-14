@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <title>股票定期定額投資回測分析 - BS5 + jQuery</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        body {
+            background-color: #f4f6f9;
+            font-family: 'Segoe UI', Microsoft JhengHei, sans-serif;
+        }
+
+        .container-input {
+            background-color: #ffffff;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            border-top: 4px solid #0d6efd;
+        }
+
+        .container-result {
+            background-color: #ffffff;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            border-top: 4px solid #198754;
+        }
+
+        .kpi-card {
+            border-radius: 10px;
+            padding: 16px;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        }
+
+        .kpi-title {
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-bottom: 6px;
+            font-weight: 600;
+        }
+
+        .kpi-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+        }
+
+        .table-responsive {
+            max-height: 520px;
+            overflow-y: auto;
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            background-color: #212529 !important;
+            color: #ffffff !important;
+            z-index: 1;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container my-4 text-center">
+        <h2 class="fw-bold text-dark"><i class="bi bi-graph-up-arrow text-primary"></i> 股票投資策略回測分析系統</h2>
+        <p class="text-muted">載入歷史 JSON 數據，試算「每月」或「每年」定期定額之投資績效與報酬率</p>
+    </div>
+
+    <!-- 第一個 Container: container-input -->
+    <div class="container mb-4 container-input">
+        <h4 class="mb-4 text-primary fw-bold">
+            <i class="bi bi-sliders"></i> 回測參數設定 (Input Parameters)
+        </h4>
+
+        <form id="backtest-form" onsubmit="return false;">
+            <div class="row g-3 mb-3">
+                <!-- 1. 選擇資料集 -->
+                <div class="col-md-6">
+                    <label for="stock-select" class="form-label fw-bold">1. 選擇資料集 (JSON File):</label>
+                    <select id="stock-select" class="form-select border-primary">
+                        <option value="../data/data/TWSE_DLY_0050, 1W.json" selected>TWSE_DLY_0050, 1W.json (元大台灣0050 周K)</option>
+                        <option value="../data/data/TWSE_DLY_0050, 1M.json">TWSE_DLY_0050, 1M.json (元大台灣0050 月K)</option>
+                        <option value="../data/data/BATS_QQQ, 1W.json">BATS_QQQ, 1W.json (Nasdaq QQQ 周K)</option>
+                        <option value="../data/data/BATS_QQQ, 1M.json">BATS_QQQ, 1M.json (Nasdaq QQQ 月K)</option>
+                        <option value="../data/data/BATS_VOO, 1W.json">BATS_VOO, 1W.json (S&P 500 VOO 周K)</option>
+                        <option value="../data/data/BATS_VOO, 1M.json">BATS_VOO, 1M.json (S&P 500 VOO 月K)</option>
+                    </select>
+                </div>
+
+                <!-- 2. 選擇策略 -->
+                <div class="col-md-6">
+                    <label for="strategy-select" class="form-label fw-bold">2. 投資策略選擇:</label>
+                    <select id="strategy-select" class="form-select border-primary">
+                        <option value="1" selected>策略一：每月第一天定期定額</option>
+                        <option value="2">策略二：每年第一天金額</option>
+                        <option value="3">策略三：單筆 第一個起始日 投資</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <!-- 3. 金額 -->
+                <div class="col-md-4">
+                    <label for="invest-amount" class="form-label fw-bold">3. 投資金額 ($):</label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input type="number" id="invest-amount" class="form-control" value="10000" min="100" step="100" required>
+                    </div>
+                </div>
+
+                <!-- 4. 起始日 年 月 -->
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">4. 起始日期 (Start Date):</label>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <select id="start-year" class="form-select"></select>
+                        </div>
+                        <div class="col-6">
+                            <select id="start-month" class="form-select">
+                                <option value="01">01 月</option>
+                                <option value="02">02 月</option>
+                                <option value="03">03 月</option>
+                                <option value="04">04 月</option>
+                                <option value="05">05 月</option>
+                                <option value="06">06 月</option>
+                                <option value="07">07 月</option>
+                                <option value="08">08 月</option>
+                                <option value="09">09 月</option>
+                                <option value="10">10 月</option>
+                                <option value="11">11 月</option>
+                                <option value="12">12 月</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. 結算日 年 月 -->
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">5. 結算日期 (End Date):</label>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <select id="end-year" class="form-select"></select>
+                        </div>
+                        <div class="col-6">
+                            <select id="end-month" class="form-select">
+                                <option value="01">01 月</option>
+                                <option value="02">02 月</option>
+                                <option value="03">03 月</option>
+                                <option value="04">04 月</option>
+                                <option value="05">05 月</option>
+                                <option value="06">06 月</option>
+                                <option value="07">07 月</option>
+                                <option value="08">08 月</option>
+                                <option value="09">09 月</option>
+                                <option value="10">10 月</option>
+                                <option value="11">11 月</option>
+                                <option value="12" selected>12 月</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 6. Submit 按鈕 -->
+            <div class="text-end">
+                <button type="submit" id="btn-submit" class="btn btn-primary btn-lg px-5 fw-bold shadow-sm">
+                    <i class="bi bi-play-circle-fill me-1"></i> 開始執行策略回測 (Submit)
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 第二個 Container: container-result -->
+    <div class="container mb-5 container-result">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0 text-success fw-bold">
+                <i class="bi bi-pie-chart-fill"></i> 投資結果分析 (Backtest Result Analysis)
+            </h4>
+            <span id="result-badge" class="badge bg-primary fs-6">TWSE_DLY_0050, 1W.json</span>
+        </div>
+
+        <p id="strategy-summary-desc" class="text-muted mb-4">
+            載入資料中...
+        </p>
+
+        <!-- KPI 總覽卡片列 -->
+        <div class="row g-3 mb-4" id="kpi-row">
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="kpi-card">
+                    <div class="kpi-title"><i class="bi bi-wallet2"></i> 總投入本金</div>
+                    <div class="kpi-value text-dark" id="kpi-invested">$0</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="kpi-card">
+                    <div class="kpi-title"><i class="bi bi-bank"></i> 結算總資產</div>
+                    <div class="kpi-value text-primary" id="kpi-final-value">$0</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="kpi-card">
+                    <div class="kpi-title"><i class="bi bi-cash-coin"></i> 累積淨損益</div>
+                    <div class="kpi-value" id="kpi-profit">$0</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="kpi-card">
+                    <div class="kpi-title"><i class="bi bi-percent"></i> 總報酬率 (ROI)</div>
+                    <div class="kpi-value" id="kpi-roi">0.00%</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="kpi-card">
+                    <div class="kpi-title"><i class="bi bi-graph-up"></i> 年化報酬率 (CAGR)</div>
+                    <div class="kpi-value text-dark" id="kpi-cagr">0.00%</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="kpi-card">
+                    <div class="kpi-title"><i class="bi bi-layers"></i> 累積購入股數</div>
+                    <div class="kpi-value text-secondary" id="kpi-shares">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 交易明細表格 -->
+        <h5 class="fw-bold mb-3 text-secondary"><i class="bi bi-list-columns-reverse"></i> 歷史扣款交易明細 (Transaction Log)</h5>
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>扣款交易日期</th>
+                        <th class="text-end">當日收盤價 ($)</th>
+                        <th class="text-end">投入金額 ($)</th>
+                        <th class="text-end">購入股數</th>
+                        <th class="text-end">累積購入股數</th>
+                        <th class="text-end">累積投入本金 ($)</th>
+                        <th class="text-end">累積當期資產價值 ($)</th>
+                    </tr>
+                </thead>
+                <tbody id="result-tbody">
+                    <tr>
+                        <td colspan="8" class="text-center text-secondary py-4">請設定參數並點擊「開始執行策略回測」按鈕...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function () {
+            let currentRawData = [];
+            let currentFileName = '';
+
+            // 格式化數字千分位與小數
+            function fmtNum(num, dec = 2) {
+                if (num === null || num === undefined || isNaN(num)) return '-';
+                return Number(num).toLocaleString('zh-TW', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+            }
+
+            // 初始化年份選單選項
+            function populateYearSelects(minYear, maxYear) {
+                let startOptions = '';
+                let endOptions = '';
+                for (let y = minYear; y <= maxYear; y++) {
+                    startOptions += `<option value="${y}">${y} 年</option>`;
+                    endOptions += `<option value="${y}">${y} 年</option>`;
+                }
+                $('#start-year').html(startOptions).val(minYear);
+                $('#end-year').html(endOptions).val(maxYear);
+            }
+
+            // 載入 JSON 資料檔
+            function loadDataset(jsonPath, callback) {
+                const fileName = jsonPath.split('/').pop();
+                currentFileName = fileName;
+                $('#result-badge').text(fileName);
+
+                $.getJSON(jsonPath, function (data) {
+                    // 按日期排序 (Ascending)
+                    currentRawData = data.sort((a, b) => a.time.localeCompare(b.time));
+
+                    if (currentRawData.length > 0) {
+                        const firstDate = currentRawData[0].time;
+                        const lastDate = currentRawData[currentRawData.length - 1].time;
+                        
+                        const minYear = parseInt(firstDate.substring(0, 4));
+                        const maxYear = parseInt(lastDate.substring(0, 4));
+                        const minMonth = firstDate.substring(5, 7);
+                        const maxMonth = lastDate.substring(5, 7);
+
+                        populateYearSelects(minYear, maxYear);
+                        $('#start-month').val(minMonth);
+                        $('#end-month').val(maxMonth);
+
+                        if (callback) callback();
+                    }
+                }).fail(function () {
+                    alert('無法載入 JSON 數據檔案，請確認路徑：' + jsonPath);
+                });
+            }
+
+            // 執行策略回測計算
+            function executeBacktest() {
+                if (!currentRawData || currentRawData.length === 0) return;
+
+                const strategy = $('#strategy-select').val(); // '1', '2', 或 '3'
+                const amount = parseFloat($('#invest-amount').val());
+                const startYM = $('#start-year').val() + '-' + $('#start-month').val();
+                const endYM = $('#end-year').val() + '-' + $('#end-month').val();
+
+                if (isNaN(amount) || amount <= 0) {
+                    alert('請輸入有效的投資金額！');
+                    return;
+                }
+
+                if (startYM > endYM) {
+                    alert('起始日期不能大於結算日期！');
+                    return;
+                }
+
+                // 過濾時間範圍內資料
+                const inRangeData = currentRawData.filter(d => {
+                    const ym = d.time.substring(0, 7);
+                    return ym >= startYM && ym <= endYM;
+                });
+
+                if (inRangeData.length === 0) {
+                    $('#result-tbody').html('<tr><td colspan="8" class="text-center text-warning py-4">選取的日期區間內無交易資料，請調整起始/結算日期。</td></tr>');
+                    return;
+                }
+
+                let purchases = [];
+                let totalInvested = 0;
+                let totalShares = 0;
+                let seenKeys = new Set();
+
+                if (strategy === '3') {
+                    // 策略三：單筆 第一個起始日 投資
+                    const firstRow = inRangeData[0];
+                    const price = parseFloat(firstRow.close);
+                    if (price > 0) {
+                        const sharesBought = amount / price;
+                        totalInvested = amount;
+                        totalShares = sharesBought;
+                        const cumValue = totalShares * price;
+
+                        purchases.push({
+                            date: firstRow.time,
+                            price: price,
+                            amount: amount,
+                            sharesBought: sharesBought,
+                            cumShares: totalShares,
+                            cumInvested: totalInvested,
+                            cumValue: cumValue
+                        });
+                    }
+                } else {
+                    // 策略一(每月第一天) / 策略二(每年第一天)
+                    $.each(inRangeData, function (idx, row) {
+                        const year = row.time.substring(0, 4);
+                        const month = row.time.substring(0, 7);
+                        const key = (strategy === '1') ? month : year;
+
+                        if (!seenKeys.has(key)) {
+                            seenKeys.add(key);
+                            const price = parseFloat(row.close);
+                            if (price > 0) {
+                                const sharesBought = amount / price;
+                                totalInvested += amount;
+                                totalShares += sharesBought;
+                                const cumValue = totalShares * price;
+
+                                purchases.push({
+                                    date: row.time,
+                                    price: price,
+                                    amount: amount,
+                                    sharesBought: sharesBought,
+                                    cumShares: totalShares,
+                                    cumInvested: totalInvested,
+                                    cumValue: cumValue
+                                });
+                            }
+                        }
+                    });
+                }
+
+                if (purchases.length === 0) {
+                    $('#result-tbody').html('<tr><td colspan="8" class="text-center text-warning py-4">無有效交易紀錄。</td></tr>');
+                    return;
+                }
+
+                // 結算日資料
+                const finalRow = inRangeData[inRangeData.length - 1];
+                const finalPrice = parseFloat(finalRow.close);
+                const finalValue = totalShares * finalPrice;
+                const netProfit = finalValue - totalInvested;
+                const totalROI = totalInvested > 0 ? (netProfit / totalInvested) * 100 : 0;
+
+                // 年化報酬率 (CAGR) 計算
+                const dStart = new Date(purchases[0].date);
+                const dEnd = new Date(finalRow.time);
+                const diffYears = Math.max(0.1, (dEnd - dStart) / (1000 * 60 * 60 * 24 * 365.25));
+                let cagr = 0;
+                if (diffYears > 0 && totalInvested > 0 && finalValue > 0) {
+                    cagr = (Math.pow(finalValue / totalInvested, 1 / diffYears) - 1) * 100;
+                }
+
+                // 更新 KPI 總覽卡片
+                $('#kpi-invested').text('$' + fmtNum(totalInvested, 0));
+                $('#kpi-final-value').text('$' + fmtNum(finalValue, 0));
+
+                const profitEl = $('#kpi-profit');
+                const roiEl = $('#kpi-roi');
+                if (netProfit >= 0) {
+                    profitEl.text('+$' + fmtNum(netProfit, 0)).attr('class', 'kpi-value text-danger');
+                    roiEl.text('+' + fmtNum(totalROI, 2) + '%').attr('class', 'kpi-value text-danger');
+                } else {
+                    profitEl.text('-$' + fmtNum(Math.abs(netProfit), 0)).attr('class', 'kpi-value text-success');
+                    roiEl.text(fmtNum(totalROI, 2) + '%').attr('class', 'kpi-value text-success');
+                }
+
+                $('#kpi-cagr').text((cagr >= 0 ? '+' : '') + fmtNum(cagr, 2) + '%');
+                $('#kpi-shares').text(fmtNum(totalShares, 2) + ' 股');
+
+                // 更新敘述文字
+                let stratName = '';
+                if (strategy === '1') stratName = '策略一：每月第一天定期定額';
+                else if (strategy === '2') stratName = '策略二：每年第一天金額';
+                else if (strategy === '3') stratName = '策略三：單筆第一個起始日投資';
+
+                $('#strategy-summary-desc').html(`
+                    資料集：<strong>${currentFileName}</strong> | 採用 <strong>${stratName}</strong> | 
+                    ${strategy === '3' ? '單筆投入' : '每期投入'}：<strong>$${fmtNum(amount, 0)}</strong> | 
+                    回測區間：<strong>${purchases[0].date}</strong> 至 <strong>${finalRow.time}</strong> (共 ${purchases.length} 期扣款，約 ${diffYears.toFixed(1)} 年) | 
+                    結算股價：<strong>$${fmtNum(finalPrice, 2)}</strong>
+                `);
+
+                // 渲染交易明細表格
+                let tbodyHtml = '';
+                $.each(purchases, function (i, p) {
+                    tbodyHtml += `
+                        <tr>
+                            <td>${i + 1}</td>
+                            <td><span class="badge bg-light text-dark border">${p.date}</span></td>
+                            <td class="text-end fw-semibold">$${fmtNum(p.price, 2)}</td>
+                            <td class="text-end">$${fmtNum(p.amount, 0)}</td>
+                            <td class="text-end">${fmtNum(p.sharesBought, 2)}</td>
+                            <td class="text-end fw-semibold">${fmtNum(p.cumShares, 2)}</td>
+                            <td class="text-end">$${fmtNum(p.cumInvested, 0)}</td>
+                            <td class="text-end fw-bold">$${fmtNum(p.cumValue, 0)}</td>
+                        </tr>
+                    `;
+                });
+                $('#result-tbody').html(tbodyHtml);
+            }
+
+            // 初次載入預設 JSON 並執行回測
+            loadDataset('../data/data/TWSE_DLY_0050, 1W.json', function () {
+                executeBacktest();
+            });
+
+            // 選單變更時自動重新載入資料集
+            $('#stock-select').change(function () {
+                loadDataset($(this).val(), function () {
+                    executeBacktest();
+                });
+            });
+
+            // 提交按鈕或表單提交時執行回測
+            $('#backtest-form').submit(function (e) {
+                e.preventDefault();
+                executeBacktest();
+            });
+
+            $('#btn-submit').click(function () {
+                executeBacktest();
+            });
+        });
+    </script>
+</body>
+
+</html>
